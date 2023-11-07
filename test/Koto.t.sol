@@ -136,14 +136,6 @@ contract KotoTest is Test {
         assertEq(koto.allowance(address(this), alice), x);
     }
 
-    // 4. Debt decays correctly
-    // 5. Sould not adjust to early
-    // 6. Should adjust if it is behind schedule
-    // 7. If behind schedule control variable should change = to change
-    // 8. Adjustment should be lowering at the correct pace
-    // 9. Should continue to lower even with multiple deposits in the same tune interval
-    // 12. Users should get their tokens correctly.
-    // 13. Should decay a max payout in the target deposit interval
     function testBond() public {
         vm.deal(address(koto), 1000e18);
         vm.startPrank(koto.ownership());
