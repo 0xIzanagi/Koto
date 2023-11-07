@@ -32,8 +32,9 @@ contract Koto {
     PricingLibrary.Term private term;
     Limits private limits;
     uint8 private locked;
+    bool private launched;
 
-    // ========================= CONSTANTS ========================= \\
+    // =================== CONSTANTS / IMMUTABLES =================== \\
 
     string private constant NAME = "Koto";
     string private constant SYMBOL = "KOTO";
@@ -69,6 +70,7 @@ contract Koto {
         (token0, token1) = _getTokens(pair);
         zeroForOne = address(this) == token0 ? true : false;
         _allowances[address(this)][UNISWAP_V2_ROUTER] = type(uint256).max;
+        ///@dev set term conclusion to type uint48 max to prevent bonds being created before opening them to the public 
         term.conclusion = type(uint48).max;
     }
 
@@ -116,7 +118,7 @@ contract Koto {
             uint256 cachedControlVariable = _term.controlVariable;
             uint256 cachedTotalDebt = _market.totalDebt;
 
-            // Can pass in memory here as nothing has been updated yet
+            // Can pass in structs here as nothing has been updated yet
             (_market, _data, _term, adjustments) = PricingLibrary.decay(data, _market, _term, adjustments);
 
             uint256 price = PricingLibrary.marketPrice(cachedControlVariable, cachedTotalDebt, _supply);
@@ -124,11 +126,10 @@ contract Koto {
             payout = (msg.value * 1e18 / price);
             if (payout > market.maxPayout) revert MaxPayout();
 
+            // Update market variables 
             _market.capacity -= uint96(payout);
-
             _market.purchased += uint96(msg.value);
             _market.sold += uint96(payout);
-
             _market.totalDebt += uint96(payout);
 
             bool success = _bond(msg.sender, payout);
@@ -154,6 +155,7 @@ contract Koto {
     ///@param amount The amount of Koto tokens to redeem
     ///@return payout The amount of ETH received in exchange for the Koto tokens
     function redeem(uint256 amount) external returns (uint256 payout) {
+        // Underlying reserves per token
         uint256 price = (address(this).balance * 1e18) / _totalSupply;
         payout = (price * amount) / 1e18;
         _burn(msg.sender, amount);
@@ -210,7 +212,7 @@ contract Koto {
     }
 
     ///@notice get the owner of the contract
-    ///@dev ownership is nontransferable and limited in capability
+    ///@dev ownership is nontransferable and limited to opening trade, exclusion / inclusion,s and increasing liquidity
     function ownership() external pure returns (address) {
         return OWNER;
     }
@@ -246,6 +248,7 @@ contract Koto {
     function increaseLiquidity(uint256 tokenAmount, uint256 ethAmount) external {
         if (msg.sender != OWNER) revert OnlyOwner();
         _addLiquidity(tokenAmount, ethAmount);
+        emit IncreaseLiquidity(tokenAmount, ethAmount);
     }
 
     ///@notice remove a given address from fees and limits
@@ -254,12 +257,14 @@ contract Koto {
     function exclude(address user) external {
         if (msg.sender != OWNER) revert OnlyOwner();
         _excluded[user] = true;
+        emit UserExcluded(user);
     }
 
     ///@notice remove trading and wallet limits
     function removeLimits() external {
         if (msg.sender != OWNER) revert OnlyOwner();
         limits.limits = false;
+        emit LimitsRemoved(block.timestamp);
     }
 
     ///@notice add a amm pool / pair
@@ -267,20 +272,25 @@ contract Koto {
     function addAmm(address _pool) external {
         if (msg.sender != OWNER) revert OnlyOwner();
         _amms[_pool] = true;
+        emit AmmAdded(_pool);
     }
 
-    ///@notice seed the initial liquidity from this contract. 
+    ///@notice seed the initial liquidity from this contract.
     function launch() external {
         if (msg.sender != OWNER) revert OnlyOwner();
+        if (launched) revert AlreadyLaunched();
         _addInitialLiquidity();
+        launched = true;
+        emit Launched(block.timestamp);
     }
 
     ///@notice opens the bond market
-    ///@dev the liquidity pool must already be launched and initialized. As well as tokens sent to this contract from 
-    /// the bond depository. 
+    ///@dev the liquidity pool must already be launched and initialized. As well as tokens sent to this contract from
+    /// the bond depository.
     function open() external {
         if (msg.sender != OWNER) revert OnlyOwner();
         _create();
+        emit OpenBondMarket(block.timestamp);
     }
 
     // ========================= INTERNAL FUNCTIONS ========================= \\
@@ -355,7 +365,7 @@ contract Koto {
             emit CreateMarket(capacity, block.timestamp, conclusion);
         } else {
             _burn(address(this), capacity);
-            // Set the markets so that they will be closed for the next interval. Important step to make sure 
+            // Set the markets so that they will be closed for the next interval. Important step to make sure
             // that if anyone accidently tries to buy a bond they get refunded their eth.
             term.conclusion = uint48(block.timestamp + INTERVAL);
             market.capacity = 0;
@@ -507,14 +517,21 @@ contract Koto {
 
     // ========================= EVENTS ========================= \\
 
+    event AmmAdded(address poolAdded);
     event Approval(address indexed _owner, address indexed _spender, uint256 _value);
     event Bond(address indexed buyer, uint256 amount, uint256 bondPrice);
     event CreateMarket(uint256 bonds, uint256 start, uint48 end);
+    event IncreaseLiquidity(uint256 kotoAdded, uint256 ethAdded);
+    event Launched(uint256 time);
+    event LimitsRemoved(uint256 time);
+    event OpenBondMarket(uint256 openingTime);
     event Redeem(address indexed sender, uint256 burned, uint256 payout, uint256 floorPrice);
     event Transfer(address indexed _from, address indexed _to, uint256 _value);
+    event UserExcluded(address indexed userToExclude);
 
     // ========================= ERRORS ========================= \\
 
+    error AlreadyLaunched();
     error BondFailed();
     error InsufficentAllowance();
     error InsufficentBalance();

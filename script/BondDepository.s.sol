@@ -7,7 +7,7 @@ import "lib/forge-std/src/Script.sol";
 
 contract BondDepositoryScript is Script {
     BondDepository public depository;
-    
+
     function run() public {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         vm.startBroadcast(deployerPrivateKey);

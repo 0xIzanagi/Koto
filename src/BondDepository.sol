@@ -29,9 +29,15 @@ contract BondDepository {
         emit KotoSet(msg.sender, _koto);
     }
 
+    function redeemption(uint256 value) external {}
+
+    function rescueEth(address to, uint256 value) external {}
+
     event BondDeposit(address indexed sender, uint256 depositedBonds);
     event KotoSet(address indexed sender, address _koto);
 
     error KotoAlreadySet();
     error OnlyOwner();
+
+    receive() external payable {}
 }

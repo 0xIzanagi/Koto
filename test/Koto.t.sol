@@ -153,8 +153,7 @@ contract KotoTest is Test {
         require(success, "lint");
         koto.transfer(address(koto), 1_000_000e18);
         koto.open();
-        (PricingLibrary.Market memory market, PricingLibrary.Term memory terms, PricingLibrary.Data memory data) =
-            koto.marketInfo();
+        (PricingLibrary.Market memory market, PricingLibrary.Term memory terms,) = koto.marketInfo();
         vm.stopPrank();
 
         assertEq(koto.bondPrice(), koto._getPrice());
@@ -180,16 +179,14 @@ contract KotoTest is Test {
         require(success, "lint");
         koto.transfer(address(koto), 1_000_000e18);
         koto.open();
-        (PricingLibrary.Market memory market1, PricingLibrary.Term memory terms1, PricingLibrary.Data memory data1) =
-            koto.marketInfo();
+        (PricingLibrary.Market memory market1,,) = koto.marketInfo();
         vm.stopPrank();
 
         vm.prank(alice);
         (bool successful,) = address(koto).call{value: 1 ether}("");
         require(successful, "lint");
         assertGt(koto.balanceOf(alice), 0);
-        (PricingLibrary.Market memory market, PricingLibrary.Term memory terms, PricingLibrary.Data memory data) =
-            koto.marketInfo();
+        (PricingLibrary.Market memory market,,) = koto.marketInfo();
         assertGt(market.totalDebt, market1.totalDebt);
         assertGt(market1.capacity, market.capacity);
         assertGt(market.sold, 0);
@@ -308,6 +305,8 @@ contract KotoTest is Test {
     function testBondPrice() public {}
 
     function testRedeemPrice() public {}
+
+    function testBondsPreOpen() public {}
 
     receive() external payable {}
 }
