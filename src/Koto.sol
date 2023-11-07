@@ -39,8 +39,8 @@ contract Koto {
     string private constant NAME = "Koto";
     string private constant SYMBOL = "KOTO";
     uint8 private constant DECIMALS = 18;
-    uint8 private constant BUY_FEE = 50;
-    uint8 private constant SELL_FEE = 50;
+    uint8 private constant FEE = 50;
+    ///@dev flat 5% tax for buys and sells
     bool private immutable zeroForOne;
     address private constant UNISWAP_V2_ROUTER = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
     address private constant UNISWAP_V2_FACTORY = 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f;
@@ -70,7 +70,7 @@ contract Koto {
         (token0, token1) = _getTokens(pair);
         zeroForOne = address(this) == token0 ? true : false;
         _allowances[address(this)][UNISWAP_V2_ROUTER] = type(uint256).max;
-        ///@dev set term conclusion to type uint48 max to prevent bonds being created before opening them to the public 
+        ///@dev set term conclusion to type uint48 max to prevent bonds being created before opening them to the public
         term.conclusion = type(uint48).max;
     }
 
@@ -126,7 +126,7 @@ contract Koto {
             payout = (msg.value * 1e18 / price);
             if (payout > market.maxPayout) revert MaxPayout();
 
-            // Update market variables 
+            // Update market variables
             _market.capacity -= uint96(payout);
             _market.purchased += uint96(msg.value);
             _market.sold += uint96(payout);
@@ -347,6 +347,8 @@ contract Koto {
 
     ///@notice create the next bond market information
     ///@dev this is done automatically if the previous market conclusion has passed
+    /// time check must be done elsewhere as the initial conclusion is set to uint48 max,
+    /// tokens must also already be held within the contract or else the call will revert
     function _create() private {
         // Set the initial price to the current market price
         uint256 initialPrice = _getPrice();
@@ -398,7 +400,7 @@ contract Koto {
 
         if (checkLimits(from, to, _value)) revert LimitsReached();
         if (fees) {
-            uint256 fee = (_value * BUY_FEE) / 1000;
+            uint256 fee = (_value * FEE) / 1000;
 
             unchecked {
                 _balances[from] -= _value;
@@ -447,7 +449,7 @@ contract Koto {
     ///@param value the amount of koto tokens to send
     ///@dev bonds are not subject to taxes, but are subject to limits
     function _bond(address to, uint256 value) private returns (bool success) {
-        if (value > _balances[address(this)]) revert InsufficentBalance();
+        if (value > _balances[address(this)]) revert InsufficentBondsAvailable();
         if (checkLimits(address(this), to, value)) revert LimitsReached();
         unchecked {
             _balances[to] += value;
@@ -535,6 +537,7 @@ contract Koto {
     error BondFailed();
     error InsufficentAllowance();
     error InsufficentBalance();
+    error InsufficentBondsAvailable();
     error InvalidTransfer();
     error LimitsReached();
     error MarketClosed();
