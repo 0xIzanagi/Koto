@@ -6,8 +6,12 @@ import {BondDepository} from "../src/BondDepository.sol";
 import "lib/forge-std/src/Script.sol";
 
 contract BondDepositoryScript is Script {
+    BondDepository public depository;
+    
     function run() public {
-        vm.startBroadcast();
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        vm.startBroadcast(deployerPrivateKey);
+        depository = new BondDepository();
         vm.stopBroadcast();
     }
 }

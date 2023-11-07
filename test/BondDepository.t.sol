@@ -23,7 +23,32 @@ contract BondDepositoryTest is Test {
         mock = new MockToken("Mock", "MOCK", 18);
     }
 
-    function testKotoSetting() public {}
+    function testKotoSetting(address testor) public {
+        vm.prank(testor);
+        vm.expectRevert();
+        depository.setKoto(address(mock));
 
-    function testDeposit() public {}
+        vm.prank(depository.OWNER());
+        depository.setKoto(address(mock));
+
+        assertEq(address(depository.koto()), address(mock));
+
+        vm.prank(depository.OWNER());
+        vm.expectRevert();
+        depository.setKoto(address(mock));
+    }
+
+    function testDeposit(address testor) public {
+        mock.mint(address(depository), 1_000_000e18);
+        vm.prank(depository.OWNER());
+        depository.setKoto(address(mock));
+        vm.prank(testor);
+        vm.expectRevert();
+        depository.deposit(100e18);
+
+        vm.prank(depository.OWNER());
+        depository.deposit(1000e18);
+
+        assertEq(mock.balanceOf(address(mock)), 1000e18);
+    }
 }
