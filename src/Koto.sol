@@ -52,12 +52,16 @@ contract Koto {
     address private immutable token1;
     uint256 private constant INTERVAL = 86400; // 1 day in seconds
 
+    // ========================== MODIFIERS ========================== \\
+
     modifier lock() {
         if (locked == 2) revert Reentrancy();
         locked = 2;
         _;
         locked = 1;
     }
+
+    // ========================= CONTRUCTOR ========================= \\
 
     constructor() {
         pair = _createUniswapV2Pair(address(this), WETH);

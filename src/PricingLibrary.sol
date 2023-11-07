@@ -17,8 +17,8 @@ library PricingLibrary {
         uint96 capacity; // capacity remaining
         uint96 totalDebt; // total debt from market
         uint96 maxPayout; // max tokens in/out
-        uint96 sold; // base tokens out
-        uint96 purchased; // quote tokens in
+        uint96 sold; // Koto out
+        uint96 purchased; // Eth in
     }
 
     // 1 Storage Slot
@@ -31,8 +31,8 @@ library PricingLibrary {
 
     // 2 Storage slots
     struct Term {
-        uint48 conclusion; // timestamp when market no longer offered (doubles as time when market matures if fixed-expiry)
-        uint96 maxDebt; // 9 decimal debt maximum in OHM
+        uint48 conclusion; // timestamp when the current market will end
+        uint96 maxDebt; // 18 decimal "debt" in Koto
         uint256 controlVariable; // scaling variable for price
     }
 
