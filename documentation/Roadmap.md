@@ -1,1 +1,19 @@
-## Roadmap
+# Koto Initial Roadmap
+
+Koto's roadmap operates in phases, with the first three being Capital, Trade, and Expansion. Each phase has a specific targeted goal with clear objectives to be met, all dedicated to growing different aspects of Koto. While the phases are distinct and have separate benefits as well as workloads, they can and will be worked on in tandem, ensuring that time is not wasted as the protocol progresses through its development and marketing cycles.
+
+### Capital
+
+Capital is focused on creating more liquid marketplaces for Koto. The team has the utmost belief in what is being built and wants to capture as much of the upside as possible. This means being able to continue holding Koto while still growing and expanding the protocol. This first phase is centered around this specific goal. Just as the team will benefit from this, so will all the users who hold Koto. Capital is all about creating efficient and decentralized capital markets where Koto can be used as collateral to take out loans. Ideally, this phase will involve working with premier market creators to set up such a market for Koto, but if that is not possible, one will be built.
+
+### Trade
+
+Following the creation (and during) of capital markets, trade becomes the primary focus. Specifically, it involves creating or integrating unique products that allow for the protocol to generate revenue. While the tokenomics of the protocol will not be discussed in depth here, trade will allow us to make use of one of the oldest banking tricks: fractional reserves. Although the protocol will not actually be using reserves, the concept will be similar, helping to create a flywheel effect where every 1 unit of Ether made can potentially generate multiples in reserves. This is due to the inherent nature of the Koto token smart contract, where every time Ether is sent to the contract, it will sell bonds if they are available. This allows the protocol to follow one of two different paths. The first is to simply burn the received tokens, which, while not increasing the revenue by multiples, does still give each unit of Ether generated a value of over 100%. The alternative process is to sell the tokens intelligently on the open market to continue the process. Once sold, the returning Ether will then again be used to purchase bonds, with each cycle slowly decreasing the payoff, functioning similarly to how fractional reserve banking works as different banks loan out the money sent to them. This is just a side effect of the protocol implementation, but the focus of this phase is to demonstrate its power. By increasing revenue streams, we will be able to grow the Koto reserves much quicker than expected, creating a strong floor and increasing holders' confidence.
+
+### Expansion
+
+Lastly, Expansion. With a solid foundation in place, flexibility in Koto use cases, revenue flowing in, and multiple options for users to use Koto tokens, it is time to expand. This final phase of the initial roadmap is all about growth. Expanding through strategic marketing and partnerships to put Koto in the best possible position for years to come, it sets up the next phases that follow.
+
+### Conclusion
+
+While this is not a hard-and-fast roadmap that users typically see, we leave space for flexibility and avoid getting locked into decisions, allowing for changes in exact implementation. Overall, this is a far better structure, as we have seen many protocols get locked into specific decisions made in haste that do not ultimately benefit the protocol long term, simply because "it is on the roadmap". We have also opted not to fill it with useless information like "10 thousand followers on Twitter" or "exchange listing," as these are functionalities that do not actually benefit the holders. Rather, we go for the approach of maximum flexibility in order to constantly evaluate our decisions and ensure they will be the best over the longer time horizon.
