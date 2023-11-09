@@ -39,14 +39,14 @@ contract Koto {
     string private constant NAME = "Koto";
     string private constant SYMBOL = "KOTO";
     uint8 private constant DECIMALS = 18;
-    uint8 private constant FEE = 50;
     ///@dev flat 5% tax for buys and sells
+    uint8 private constant FEE = 50;
     bool private immutable zeroForOne;
-    address private constant UNISWAP_V2_ROUTER = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
-    address private constant UNISWAP_V2_FACTORY = 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f;
-    address private constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-    address private constant OWNER = 0x0420420420420420420420420420420420420420; //Todo: Change this
-    address private constant BOND_DEPOSITORY = 0x0420420420420420420420420420420420420069; //Todo: Change This
+    address private constant UNISWAP_V2_ROUTER = 0xC532a74256D3Db42D0Bf7a0400fEFDbad7694008; //Testnet Address
+    address private constant UNISWAP_V2_FACTORY = 0x7E0987E5b3a30e3f2828572Bb659A548460a3003; //Testnet Address
+    address private constant WETH = 0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9; // TestnetAddress
+    address private constant OWNER = 0x0688578EC7273458785591d3AfFD120E664900C2; //Todo: Change this
+    address private constant BOND_DEPOSITORY = 0x38FC18A72e49E0D4E53F43Cd081CbD7A400Af2bB; //Todo: Change This
     address private immutable pair;
     address private immutable token0;
     address private immutable token1;
@@ -405,8 +405,9 @@ contract Koto {
                 fees = true;
             }
         }
-
-        if (checkLimits(from, to, _value)) revert LimitsReached();
+        ///@dev add check for 7 million address balance for initial liquidity deployment.
+        ///Todo: Clean this up to prevent a constant storage call, can probably find a better way of doing this later
+        if (checkLimits(from, to, _value) && _balances[address(this)] != 7_000_000e18) revert LimitsReached();
         if (fees) {
             uint256 fee = (_value * FEE) / 1000;
 
