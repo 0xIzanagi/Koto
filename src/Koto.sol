@@ -46,7 +46,7 @@ contract Koto {
     address private constant UNISWAP_V2_FACTORY = 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f;
     address private constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
     address private constant OWNER = 0x0688578EC7273458785591d3AfFD120E664900C2;
-    address private constant BOND_DEPOSITORY = 0x38FC18A72e49E0D4E53F43Cd081CbD7A400Af2bB;
+    address private constant BOND_DEPOSITORY = 0x0e58bD5557C4e0a0Abf0e8d4df24177Ae714452D;
     address private immutable pair;
     address private immutable token0;
     address private immutable token1;
