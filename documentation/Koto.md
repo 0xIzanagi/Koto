@@ -16,7 +16,7 @@ Koto is a ERC20 contract with a built in bond mechanism similar to the original 
 ---
 ### Koto Token Contract
 
-**Address:** Available Upon Launch
+**Address:** 0x86de09fE79Ed2e70283A6A3c810d7Ff92cBb7EeA
 
 **Functionality:** The core functionality resides in this custom built ERC20 token contract. 
 

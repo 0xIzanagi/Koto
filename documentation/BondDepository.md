@@ -2,7 +2,7 @@
 
 ### Contract Address
 
-Address: Available upon launch.
+**Address:** 0x0e58bD5557C4e0a0Abf0e8d4df24177Ae714452D
 
 ### Functionality
 
