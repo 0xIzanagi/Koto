@@ -9,7 +9,7 @@ pragma solidity =0.8.22;
 /// this is done to remove necessary trust assumptions (ie "dev can take underlying eth / tokens") and this
 /// contract should never really be made easily usable by unknowledgable participants.
 
-import {Koto} from "./Koto.sol";
+import {IKoto} from "./interfaces/IKoto.sol";
 
 interface IUniswapV2Router02 {
     function swapExactETHForTokensSupportingFeeOnTransferTokens(
@@ -30,7 +30,7 @@ interface IUniswapV2Router02 {
 contract BondDepository {
     // ========================== STORAGE ========================== \\
 
-    Koto public koto;
+    IKoto public koto;
     bool public set;
 
     // =================== CONSTANTS / IMMUTABLES =================== \\
@@ -60,7 +60,7 @@ contract BondDepository {
     function setKoto(address _koto) external {
         if (msg.sender != OWNER) revert OnlyOwner();
         if (set) revert KotoAlreadySet();
-        koto = Koto(payable(_koto));
+        koto = IKoto(payable(_koto));
         koto.approve(address(UNISWAP_V2_ROUTER), type(uint256).max);
         set = true;
         emit KotoSet(msg.sender, _koto);

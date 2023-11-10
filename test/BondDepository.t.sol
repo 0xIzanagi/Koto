@@ -90,13 +90,13 @@ contract BondDepositoryTest is Test {
     }
 
     function testSwapEth(uint256 x) public {
-         vm.assume(x > 1 ether && x < 1000 ether);
+        vm.assume(x > 1 ether && x < 1000 ether);
         vm.deal(address(depository), 1000 ether);
 
-         uint256 pre = koto.balanceOf(address(depository));
+        uint256 pre = koto.balanceOf(address(depository));
 
         vm.expectRevert();
-       
+
         vm.prank(address(0x01));
         depository.swap(x, false);
 
@@ -105,7 +105,6 @@ contract BondDepositoryTest is Test {
         depository.swap(x, false);
 
         assertGt(koto.balanceOf(address(depository)), pre);
-
     }
 
     function testBond(uint256 x, address y) public {

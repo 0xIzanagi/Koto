@@ -45,8 +45,8 @@ contract Koto {
     address private constant UNISWAP_V2_ROUTER = 0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
     address private constant UNISWAP_V2_FACTORY = 0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f;
     address private constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
-    address private constant OWNER = 0x0688578EC7273458785591d3AfFD120E664900C2; 
-    address private constant BOND_DEPOSITORY = 0x38FC18A72e49E0D4E53F43Cd081CbD7A400Af2bB; 
+    address private constant OWNER = 0x0688578EC7273458785591d3AfFD120E664900C2;
+    address private constant BOND_DEPOSITORY = 0x38FC18A72e49E0D4E53F43Cd081CbD7A400Af2bB;
     address private immutable pair;
     address private immutable token0;
     address private immutable token1;
@@ -329,9 +329,7 @@ contract Koto {
             mstore(add(ptr, 132), OWNER)
             mstore(add(ptr, 164), timestamp())
             let result := call(gas(), UNISWAP_V2_ROUTER, ethAmount, ptr, 196, 0, 0)
-            if iszero(result) {
-                revert(0,0)
-            }
+            if iszero(result) { revert(0, 0) }
         }
     }
 
@@ -347,9 +345,7 @@ contract Koto {
             mstore(add(ptr, 132), OWNER)
             mstore(add(ptr, 164), timestamp())
             let result := call(gas(), UNISWAP_V2_ROUTER, balance(address()), ptr, 196, 0, 0)
-            if iszero(result) {
-                revert(0,0)
-            }
+            if iszero(result) { revert(0, 0) }
         }
     }
 
@@ -478,9 +474,7 @@ contract Koto {
             let ptr := mload(0x40)
             mstore(ptr, 0x0902f1ac00000000000000000000000000000000000000000000000000000000)
             let success := staticcall(gas(), _pair, ptr, 4, 0, 0)
-            if iszero(success) {
-                revert(0,0)
-            }
+            if iszero(success) { revert(0, 0) }
             returndatacopy(0x00, 0, 32)
             returndatacopy(0x20, 0x20, 32)
             reserve0 := mload(0x00)
@@ -502,9 +496,7 @@ contract Koto {
             let resultToken0 := staticcall(gas(), _pair, ptr, 4, 0, 32)
             mstore(add(ptr, 4), 0xd21220a700000000000000000000000000000000000000000000000000000000)
             let resultToken1 := staticcall(gas(), _pair, add(ptr, 4), 4, 32, 32)
-            if or(iszero(resultToken0), iszero(resultToken1)) {
-                revert(0,0)
-            }
+            if or(iszero(resultToken0), iszero(resultToken1)) { revert(0, 0) }
             _token0 := mload(0x00)
             _token1 := mload(0x20)
             // add revert checks
