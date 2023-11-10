@@ -32,7 +32,6 @@ library PricingLibrary {
     // 2 Storage slots
     struct Term {
         uint48 conclusion; // timestamp when the current market will end
-        uint96 maxDebt; // 18 decimal "debt" in Koto
         uint256 controlVariable; // scaling variable for price
     }
 

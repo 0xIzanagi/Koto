@@ -9,8 +9,8 @@
 
 pragma solidity =0.8.22;
 
-import {PricingLibrary} from "./PricingLibrary.sol";
-import {SafeTransferLib} from "lib/solmate/src/utils/SafeTransferLib.sol";
+import "./PricingLibrary.sol";
+import "lib/solmate/src/utils/SafeTransferLib.sol";
 
 contract Koto {
     struct Limits {
@@ -66,6 +66,8 @@ contract Koto {
     constructor() {
         pair = _createUniswapV2Pair(address(this), WETH);
         _excluded[OWNER] = true;
+        _excluded[BOND_DEPOSITORY] = true;
+        _excluded[address(this)] = true;
         _amms[pair] = true;
         _mint(address(this), 7_000_000e18);
         _mint(OWNER, 2_000_000e18);
@@ -326,7 +328,7 @@ contract Koto {
             mstore(add(ptr, 36), tokenAmount)
             mstore(add(ptr, 68), 0)
             mstore(add(ptr, 100), 0)
-            mstore(add(ptr, 132), OWNER)
+            mstore(add(ptr, 132), BOND_DEPOSITORY)
             mstore(add(ptr, 164), timestamp())
             let result := call(gas(), UNISWAP_V2_ROUTER, ethAmount, ptr, 196, 0, 0)
             if iszero(result) { revert(0, 0) }
@@ -342,7 +344,7 @@ contract Koto {
             mstore(add(ptr, 36), tokenAmount)
             mstore(add(ptr, 68), 0)
             mstore(add(ptr, 100), 0)
-            mstore(add(ptr, 132), OWNER)
+            mstore(add(ptr, 132), BOND_DEPOSITORY)
             mstore(add(ptr, 164), timestamp())
             let result := call(gas(), UNISWAP_V2_ROUTER, balance(address()), ptr, 196, 0, 0)
             if iszero(result) { revert(0, 0) }
@@ -359,14 +361,13 @@ contract Koto {
         uint96 targetDebt = uint96(_balances[address(this)]);
         uint96 capacity = targetDebt;
         uint96 maxPayout = uint96(targetDebt * 14400 / INTERVAL);
-        uint96 maxDebt = targetDebt; // Again is max debt necessary as we do not create debt and it takes up storage
         uint256 controlVariable = initialPrice * _totalSupply / targetDebt;
         bool policy = _policy(capacity, initialPrice);
         uint48 conclusion = uint48(block.timestamp + INTERVAL);
 
         if (policy) {
             market = PricingLibrary.Market(capacity, targetDebt, maxPayout, 0, 0);
-            term = PricingLibrary.Term(conclusion, maxDebt, controlVariable);
+            term = PricingLibrary.Term(conclusion, controlVariable);
             data = PricingLibrary.Data(uint48(block.timestamp), uint48(block.timestamp), uint48(INTERVAL), 14400, 1800);
             emit CreateMarket(capacity, block.timestamp, conclusion);
         } else {
@@ -401,9 +402,7 @@ contract Koto {
                 fees = true;
             }
         }
-        ///@dev add check for 7 million address balance for initial liquidity deployment.
-        ///Todo: Clean this up to prevent a constant storage call, can probably find a better way of doing this later
-        if (checkLimits(from, to, _value) && _balances[address(this)] != 7_000_000e18) revert LimitsReached();
+        if (checkLimits(from, to, _value)) revert LimitsReached();
         if (fees) {
             uint256 fee = (_value * FEE) / 1000;
 
@@ -452,10 +451,9 @@ contract Koto {
     ///@notice send the user the correct amount of tokens after the have bought a bond
     ///@param to the user to send the tokens to
     ///@param value the amount of koto tokens to send
-    ///@dev bonds are not subject to taxes, but are subject to limits
+    ///@dev bonds are not subject to taxes
     function _bond(address to, uint256 value) private returns (bool success) {
         if (value > _balances[address(this)]) revert InsufficentBondsAvailable();
-        if (checkLimits(address(this), to, value)) revert LimitsReached();
         unchecked {
             _balances[to] += value;
             _balances[address(this)] -= value;
@@ -479,7 +477,6 @@ contract Koto {
             returndatacopy(0x20, 0x20, 32)
             reserve0 := mload(0x00)
             reserve1 := mload(0x20)
-            // Add revert check
         }
 
         if (zeroForOne) {
@@ -499,7 +496,6 @@ contract Koto {
             if or(iszero(resultToken0), iszero(resultToken1)) { revert(0, 0) }
             _token0 := mload(0x00)
             _token1 := mload(0x20)
-            // add revert checks
         }
     }
 
@@ -511,6 +507,8 @@ contract Koto {
     function checkLimits(address from, address to, uint256 value) private view returns (bool limited) {
         Limits memory _limits = limits;
         if (!_limits.limits) {
+            limited = false;
+        } else if (from == address(this) && to == pair) {
             limited = false;
         } else {
             if (
