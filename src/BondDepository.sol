@@ -10,7 +10,6 @@ pragma solidity =0.8.22;
 /// contract should never really be made easily usable by unknowledgable participants.
 
 import {Koto} from "./Koto.sol";
-import {SafeTransferLib} from "lib/solmate/src/utils/SafeTransferLib.sol";
 
 interface IUniswapV2Router02 {
     function swapExactETHForTokensSupportingFeeOnTransferTokens(
@@ -36,10 +35,10 @@ contract BondDepository {
 
     // =================== CONSTANTS / IMMUTABLES =================== \\
 
-    address public constant OWNER = 0x0688578EC7273458785591d3AfFD120E664900C2; // Todo: Change this
+    address public constant OWNER = 0x0688578EC7273458785591d3AfFD120E664900C2;
     IUniswapV2Router02 private constant UNISWAP_V2_ROUTER =
-        IUniswapV2Router02(0xC532a74256D3Db42D0Bf7a0400fEFDbad7694008);
-    address private constant WETH = 0x7b79995e5f793A07Bc00c21412e50Ecae098E7f9;
+        IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+    address private constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
 
     // ========================= CONTRUCTOR ========================= \\
 

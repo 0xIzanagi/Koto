@@ -1,5 +1,14 @@
 // SPDX-License-Identifier: MIT
 
+pragma solidity =0.8.22;
+
+/// @title Bond Depository
+/// @author Izanagi Dev
+/// @notice Hold Koto tokens to slowly drip them into circulation with bonds
+/// @dev there is no functions in order to save users from accidently sending tokens or eth to this contract.
+/// this is done to remove necessary trust assumptions (ie "dev can take underlying eth / tokens") and this
+/// contract should never really be made easily usable by unknowledgable participants.
+
 ///@title Koto ERC20 Token
 ///@author Izanagi Dev
 ///@notice A stripped down ERC20 tax token that implements automated and continious monetary policy decisions.
@@ -7,10 +16,453 @@
 /// The bonding schedule is set to attempt to sell all of the tokens held within the contract in 1 day intervals. Taking a snapshot
 /// of the amount currently held within the contract at the start of the next internal period, using this amount as the capcipty to be sold.
 
-pragma solidity =0.8.22;
+library PricingLibrary {
+    // 1 Slot
+    struct Data {
+        uint48 lastTune;
+        uint48 lastDecay; // last timestamp when market was created and debt was decayed
+        uint48 length; // time from creation to conclusion. used as speed to decay debt.
+        uint48 depositInterval; // target frequency of deposits
+        uint48 tuneInterval; // frequency of tuning
+    }
 
-import {PricingLibrary} from "./PricingLibrary.sol";
-import {SafeTransferLib} from "lib/solmate/src/utils/SafeTransferLib.sol";
+    // 2 Storage slots
+    struct Market {
+        uint96 capacity; // capacity remaining
+        uint96 totalDebt; // total debt from market
+        uint96 maxPayout; // max tokens in/out
+        uint96 sold; // Koto out
+        uint96 purchased; // Eth in
+    }
+
+    // 1 Storage Slot
+    struct Adjustment {
+        uint128 change;
+        uint48 lastAdjustment;
+        uint48 timeToAdjusted;
+        bool active;
+    }
+
+    // 2 Storage slots
+    struct Term {
+        uint48 conclusion; // timestamp when the current market will end
+        uint96 maxDebt; // 18 decimal "debt" in Koto
+        uint256 controlVariable; // scaling variable for price
+    }
+
+    function decay(Data memory data, Market memory market, Term memory terms, Adjustment memory adjustments)
+        internal
+        view
+        returns (Market memory, Data memory, Term memory, Adjustment memory)
+    {
+        uint48 time = uint48(block.timestamp);
+        market.totalDebt -= debtDecay(data, market);
+        data.lastDecay = time;
+
+        if (adjustments.active) {
+            (uint128 adjustby, uint48 dt, bool stillActive) = controlDecay(adjustments);
+            terms.controlVariable -= adjustby;
+            if (stillActive) {
+                adjustments.change -= adjustby;
+                adjustments.timeToAdjusted -= dt;
+                adjustments.lastAdjustment = time;
+            } else {
+                adjustments.active = false;
+            }
+        }
+        return (market, data, terms, adjustments);
+    }
+
+    function controlDecay(Adjustment memory info) internal view returns (uint128, uint48, bool) {
+        if (!info.active) return (0, 0, false);
+
+        uint48 secondsSince = uint48(block.timestamp) - info.lastAdjustment;
+        bool active = secondsSince < info.timeToAdjusted;
+        uint128 _decay = active ? (info.change * secondsSince) / info.timeToAdjusted : info.change;
+        return (_decay, secondsSince, active);
+    }
+
+    function marketPrice(uint256 _controlVariable, uint256 _totalDebt, uint256 _totalSupply)
+        internal
+        pure
+        returns (uint256)
+    {
+        return ((_controlVariable * debtRatio(_totalDebt, _totalSupply)) / 1e18);
+    }
+
+    function debtRatio(uint256 _totalDebt, uint256 _totalSupply) internal pure returns (uint256) {
+        return ((_totalDebt * 1e18) / _totalSupply);
+    }
+
+    function debtDecay(Data memory data, Market memory market) internal view returns (uint64) {
+        uint256 secondsSince = block.timestamp - data.lastDecay;
+        return uint64((market.totalDebt * secondsSince) / data.length);
+    }
+
+    struct TuneCache {
+        uint256 remaining;
+        uint256 price;
+        uint256 capacity;
+        uint256 targetDebt;
+        uint256 ncv;
+    }
+
+    function tune(
+        uint48 time,
+        Market memory market,
+        Term memory term,
+        Data memory data,
+        Adjustment memory adjustment,
+        uint256 _totalSupply
+    ) internal pure returns (Market memory, Term memory, Data memory, Adjustment memory) {
+        TuneCache memory cache;
+        if (time >= data.lastTune + data.tuneInterval) {
+            cache.remaining = term.conclusion - time;
+            cache.price = marketPrice(term.controlVariable, market.totalDebt, _totalSupply);
+            cache.capacity = market.capacity; //Is this even necessary?
+            market.maxPayout = uint96((cache.capacity * data.depositInterval / cache.remaining));
+            cache.targetDebt = cache.capacity * data.length / cache.remaining;
+            cache.ncv = (cache.price * _totalSupply) / cache.targetDebt;
+
+            if (cache.ncv < term.controlVariable) {
+                term.controlVariable = cache.ncv;
+            } else {
+                uint128 change = uint128(term.controlVariable - cache.ncv);
+                adjustment = Adjustment(change, time, data.tuneInterval, true);
+            }
+            data.lastTune = time;
+        }
+        return (market, term, data, adjustment);
+    }
+}
+
+/// @notice Modern and gas efficient ERC20 + EIP-2612 implementation.
+/// @author Solmate (https://github.com/transmissions11/solmate/blob/main/src/tokens/ERC20.sol)
+/// @author Modified from Uniswap (https://github.com/Uniswap/uniswap-v2-core/blob/master/contracts/UniswapV2ERC20.sol)
+/// @dev Do not manually set balances without updating totalSupply, as the sum of all user balances must not exceed it.
+abstract contract ERC20 {
+    /*//////////////////////////////////////////////////////////////
+                                 EVENTS
+    //////////////////////////////////////////////////////////////*/
+
+    event Transfer(address indexed from, address indexed to, uint256 amount);
+
+    event Approval(address indexed owner, address indexed spender, uint256 amount);
+
+    /*//////////////////////////////////////////////////////////////
+                            METADATA STORAGE
+    //////////////////////////////////////////////////////////////*/
+
+    string public name;
+
+    string public symbol;
+
+    uint8 public immutable decimals;
+
+    /*//////////////////////////////////////////////////////////////
+                              ERC20 STORAGE
+    //////////////////////////////////////////////////////////////*/
+
+    uint256 public totalSupply;
+
+    mapping(address => uint256) public balanceOf;
+
+    mapping(address => mapping(address => uint256)) public allowance;
+
+    /*//////////////////////////////////////////////////////////////
+                            EIP-2612 STORAGE
+    //////////////////////////////////////////////////////////////*/
+
+    uint256 internal immutable INITIAL_CHAIN_ID;
+
+    bytes32 internal immutable INITIAL_DOMAIN_SEPARATOR;
+
+    mapping(address => uint256) public nonces;
+
+    /*//////////////////////////////////////////////////////////////
+                               CONSTRUCTOR
+    //////////////////////////////////////////////////////////////*/
+
+    constructor(
+        string memory _name,
+        string memory _symbol,
+        uint8 _decimals
+    ) {
+        name = _name;
+        symbol = _symbol;
+        decimals = _decimals;
+
+        INITIAL_CHAIN_ID = block.chainid;
+        INITIAL_DOMAIN_SEPARATOR = computeDomainSeparator();
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                               ERC20 LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    function approve(address spender, uint256 amount) public virtual returns (bool) {
+        allowance[msg.sender][spender] = amount;
+
+        emit Approval(msg.sender, spender, amount);
+
+        return true;
+    }
+
+    function transfer(address to, uint256 amount) public virtual returns (bool) {
+        balanceOf[msg.sender] -= amount;
+
+        // Cannot overflow because the sum of all user
+        // balances can't exceed the max uint256 value.
+        unchecked {
+            balanceOf[to] += amount;
+        }
+
+        emit Transfer(msg.sender, to, amount);
+
+        return true;
+    }
+
+    function transferFrom(
+        address from,
+        address to,
+        uint256 amount
+    ) public virtual returns (bool) {
+        uint256 allowed = allowance[from][msg.sender]; // Saves gas for limited approvals.
+
+        if (allowed != type(uint256).max) allowance[from][msg.sender] = allowed - amount;
+
+        balanceOf[from] -= amount;
+
+        // Cannot overflow because the sum of all user
+        // balances can't exceed the max uint256 value.
+        unchecked {
+            balanceOf[to] += amount;
+        }
+
+        emit Transfer(from, to, amount);
+
+        return true;
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                             EIP-2612 LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    function permit(
+        address owner,
+        address spender,
+        uint256 value,
+        uint256 deadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) public virtual {
+        require(deadline >= block.timestamp, "PERMIT_DEADLINE_EXPIRED");
+
+        // Unchecked because the only math done is incrementing
+        // the owner's nonce which cannot realistically overflow.
+        unchecked {
+            address recoveredAddress = ecrecover(
+                keccak256(
+                    abi.encodePacked(
+                        "\x19\x01",
+                        DOMAIN_SEPARATOR(),
+                        keccak256(
+                            abi.encode(
+                                keccak256(
+                                    "Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"
+                                ),
+                                owner,
+                                spender,
+                                value,
+                                nonces[owner]++,
+                                deadline
+                            )
+                        )
+                    )
+                ),
+                v,
+                r,
+                s
+            );
+
+            require(recoveredAddress != address(0) && recoveredAddress == owner, "INVALID_SIGNER");
+
+            allowance[recoveredAddress][spender] = value;
+        }
+
+        emit Approval(owner, spender, value);
+    }
+
+    function DOMAIN_SEPARATOR() public view virtual returns (bytes32) {
+        return block.chainid == INITIAL_CHAIN_ID ? INITIAL_DOMAIN_SEPARATOR : computeDomainSeparator();
+    }
+
+    function computeDomainSeparator() internal view virtual returns (bytes32) {
+        return
+            keccak256(
+                abi.encode(
+                    keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                    keccak256(bytes(name)),
+                    keccak256("1"),
+                    block.chainid,
+                    address(this)
+                )
+            );
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                        INTERNAL MINT/BURN LOGIC
+    //////////////////////////////////////////////////////////////*/
+
+    function _mint(address to, uint256 amount) internal virtual {
+        totalSupply += amount;
+
+        // Cannot overflow because the sum of all user
+        // balances can't exceed the max uint256 value.
+        unchecked {
+            balanceOf[to] += amount;
+        }
+
+        emit Transfer(address(0), to, amount);
+    }
+
+    function _burn(address from, uint256 amount) internal virtual {
+        balanceOf[from] -= amount;
+
+        // Cannot underflow because a user's balance
+        // will never be larger than the total supply.
+        unchecked {
+            totalSupply -= amount;
+        }
+
+        emit Transfer(from, address(0), amount);
+    }
+}
+
+/// @notice Safe ETH and ERC20 transfer library that gracefully handles missing return values.
+/// @author Solmate (https://github.com/transmissions11/solmate/blob/main/src/utils/SafeTransferLib.sol)
+/// @dev Use with caution! Some functions in this library knowingly create dirty bits at the destination of the free memory pointer.
+/// @dev Note that none of the functions in this library check that a token has code at all! That responsibility is delegated to the caller.
+library SafeTransferLib {
+    /*//////////////////////////////////////////////////////////////
+                             ETH OPERATIONS
+    //////////////////////////////////////////////////////////////*/
+
+    function safeTransferETH(address to, uint256 amount) internal {
+        bool success;
+
+        /// @solidity memory-safe-assembly
+        assembly {
+            // Transfer the ETH and store if it succeeded or not.
+            success := call(gas(), to, amount, 0, 0, 0, 0)
+        }
+
+        require(success, "ETH_TRANSFER_FAILED");
+    }
+
+    /*//////////////////////////////////////////////////////////////
+                            ERC20 OPERATIONS
+    //////////////////////////////////////////////////////////////*/
+
+    function safeTransferFrom(
+        ERC20 token,
+        address from,
+        address to,
+        uint256 amount
+    ) internal {
+        bool success;
+
+        /// @solidity memory-safe-assembly
+        assembly {
+            // Get a pointer to some free memory.
+            let freeMemoryPointer := mload(0x40)
+
+            // Write the abi-encoded calldata into memory, beginning with the function selector.
+            mstore(freeMemoryPointer, 0x23b872dd00000000000000000000000000000000000000000000000000000000)
+            mstore(add(freeMemoryPointer, 4), and(from, 0xffffffffffffffffffffffffffffffffffffffff)) // Append and mask the "from" argument.
+            mstore(add(freeMemoryPointer, 36), and(to, 0xffffffffffffffffffffffffffffffffffffffff)) // Append and mask the "to" argument.
+            mstore(add(freeMemoryPointer, 68), amount) // Append the "amount" argument. Masking not required as it's a full 32 byte type.
+
+            success := and(
+                // Set success to whether the call reverted, if not we check it either
+                // returned exactly 1 (can't just be non-zero data), or had no return data.
+                or(and(eq(mload(0), 1), gt(returndatasize(), 31)), iszero(returndatasize())),
+                // We use 100 because the length of our calldata totals up like so: 4 + 32 * 3.
+                // We use 0 and 32 to copy up to 32 bytes of return data into the scratch space.
+                // Counterintuitively, this call must be positioned second to the or() call in the
+                // surrounding and() call or else returndatasize() will be zero during the computation.
+                call(gas(), token, 0, freeMemoryPointer, 100, 0, 32)
+            )
+        }
+
+        require(success, "TRANSFER_FROM_FAILED");
+    }
+
+    function safeTransfer(
+        ERC20 token,
+        address to,
+        uint256 amount
+    ) internal {
+        bool success;
+
+        /// @solidity memory-safe-assembly
+        assembly {
+            // Get a pointer to some free memory.
+            let freeMemoryPointer := mload(0x40)
+
+            // Write the abi-encoded calldata into memory, beginning with the function selector.
+            mstore(freeMemoryPointer, 0xa9059cbb00000000000000000000000000000000000000000000000000000000)
+            mstore(add(freeMemoryPointer, 4), and(to, 0xffffffffffffffffffffffffffffffffffffffff)) // Append and mask the "to" argument.
+            mstore(add(freeMemoryPointer, 36), amount) // Append the "amount" argument. Masking not required as it's a full 32 byte type.
+
+            success := and(
+                // Set success to whether the call reverted, if not we check it either
+                // returned exactly 1 (can't just be non-zero data), or had no return data.
+                or(and(eq(mload(0), 1), gt(returndatasize(), 31)), iszero(returndatasize())),
+                // We use 68 because the length of our calldata totals up like so: 4 + 32 * 2.
+                // We use 0 and 32 to copy up to 32 bytes of return data into the scratch space.
+                // Counterintuitively, this call must be positioned second to the or() call in the
+                // surrounding and() call or else returndatasize() will be zero during the computation.
+                call(gas(), token, 0, freeMemoryPointer, 68, 0, 32)
+            )
+        }
+
+        require(success, "TRANSFER_FAILED");
+    }
+
+    function safeApprove(
+        ERC20 token,
+        address to,
+        uint256 amount
+    ) internal {
+        bool success;
+
+        /// @solidity memory-safe-assembly
+        assembly {
+            // Get a pointer to some free memory.
+            let freeMemoryPointer := mload(0x40)
+
+            // Write the abi-encoded calldata into memory, beginning with the function selector.
+            mstore(freeMemoryPointer, 0x095ea7b300000000000000000000000000000000000000000000000000000000)
+            mstore(add(freeMemoryPointer, 4), and(to, 0xffffffffffffffffffffffffffffffffffffffff)) // Append and mask the "to" argument.
+            mstore(add(freeMemoryPointer, 36), amount) // Append the "amount" argument. Masking not required as it's a full 32 byte type.
+
+            success := and(
+                // Set success to whether the call reverted, if not we check it either
+                // returned exactly 1 (can't just be non-zero data), or had no return data.
+                or(and(eq(mload(0), 1), gt(returndatasize(), 31)), iszero(returndatasize())),
+                // We use 68 because the length of our calldata totals up like so: 4 + 32 * 2.
+                // We use 0 and 32 to copy up to 32 bytes of return data into the scratch space.
+                // Counterintuitively, this call must be positioned second to the or() call in the
+                // surrounding and() call or else returndatasize() will be zero during the computation.
+                call(gas(), token, 0, freeMemoryPointer, 68, 0, 32)
+            )
+        }
+
+        require(success, "APPROVE_FAILED");
+    }
+}
 
 contract Koto {
     struct Limits {
@@ -566,4 +1018,120 @@ contract Koto {
             bond();
         }
     }
+}
+
+interface IUniswapV2Router02 {
+    function swapExactETHForTokensSupportingFeeOnTransferTokens(
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external payable;
+    function swapExactTokensForETHSupportingFeeOnTransferTokens(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external;
+}
+
+contract BondDepository {
+    // ========================== STORAGE ========================== \\
+
+    Koto public koto;
+    bool public set;
+
+    // =================== CONSTANTS / IMMUTABLES =================== \\
+
+    address public constant OWNER = 0x0688578EC7273458785591d3AfFD120E664900C2;
+    IUniswapV2Router02 private constant UNISWAP_V2_ROUTER =
+        IUniswapV2Router02(0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D);
+    address private constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+
+    // ========================= CONTRUCTOR ========================= \\
+
+    constructor() {}
+
+    // ========================= ADMIN FUNCTIONS ========================= \\
+
+    ///@notice deposit Koto tokens into the Koto contract to be sold as bonds
+    ///@param amount the amount of koto tokens to send.
+    function deposit(uint256 amount) external {
+        if (msg.sender != OWNER) revert OnlyOwner();
+        if (address(koto) == address(0)) revert KotoNotSet();
+        koto.transfer(address(koto), amount);
+        emit BondDeposit(msg.sender, amount);
+    }
+
+    ///@notice set the koto contract address
+    ///@param _koto the address to set koto too
+    function setKoto(address _koto) external {
+        if (msg.sender != OWNER) revert OnlyOwner();
+        if (set) revert KotoAlreadySet();
+        koto = Koto(payable(_koto));
+        koto.approve(address(UNISWAP_V2_ROUTER), type(uint256).max);
+        set = true;
+        emit KotoSet(msg.sender, _koto);
+    }
+
+    ///@notice redeem koto tokens held within the contract for their underlying eth reserves
+    ///@param value the amount of koto tokens to redeem
+    function redemption(uint256 value) external {
+        if (msg.sender != OWNER) revert OnlyOwner();
+        uint256 payout = koto.redeem(value);
+        emit DepositoryRedemption(value, payout);
+    }
+
+    ///@notice swap koto tokens for eth or vis versa
+    ///@param amount the amount of eth or koto to swap for the other
+    ///@param zeroForOne if you are swapping koto for eth or vis versa
+    ///@dev true for zeroForOne means swapping for eth, it does not matter which token is
+    /// actually token zero and which one is token one. The tokens / eth must already be in the contract
+    function swap(uint256 amount, bool zeroForOne) external {
+        if (msg.sender != OWNER) revert OnlyOwner();
+        uint256 preKotoBalance = koto.balanceOf(address(this));
+        uint256 preEthBalance = address(this).balance;
+        if (zeroForOne) {
+            address[] memory path = new address[](2);
+            path[0] = address(koto);
+            path[1] = WETH;
+            UNISWAP_V2_ROUTER.swapExactTokensForETHSupportingFeeOnTransferTokens(
+                amount, 0, path, address(this), block.timestamp
+            );
+        } else {
+            address[] memory path = new address[](2);
+            path[0] = WETH;
+            path[1] = address(koto);
+            UNISWAP_V2_ROUTER.swapExactETHForTokensSupportingFeeOnTransferTokens{value: amount}(
+                0, path, address(this), block.timestamp
+            );
+        }
+        emit DepositorySwap(preKotoBalance, koto.balanceOf(address(this)), preEthBalance, address(this).balance);
+    }
+
+    function bond(uint256 value) external {
+        if (msg.sender != OWNER) revert OnlyOwner();
+        uint256 payout = koto.bond{value: value}();
+        emit DepositoryBond(value, payout);
+    }
+
+    // ========================= EVENTS ========================= \\
+
+    event BondDeposit(address indexed sender, uint256 depositedBonds);
+    event DepositoryBond(uint256 ethAmount, uint256 payout);
+    event DepositoryRedemption(uint256 kotoOut, uint256 ethIn);
+    event DepositorySwap(
+        uint256 kotoBalanceBefore, uint256 kotoBalanceAfter, uint256 ethBalanceBefore, uint256 ethBalanceAfter
+    );
+    event EthRescued(address indexed sender, address indexed user, uint256 amount);
+    event KotoSet(address indexed sender, address _koto);
+
+    // ========================= ERRORS ========================= \\
+
+    error KotoAlreadySet();
+    error KotoNotSet();
+    error OnlyOwner();
+
+    receive() external payable {}
 }

@@ -9,7 +9,7 @@ contract BondDepositoryScript is Script {
     BondDepository public depository;
 
     function run() public {
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY_KOTO");
         vm.startBroadcast(deployerPrivateKey);
         depository = new BondDepository();
         vm.stopBroadcast();
