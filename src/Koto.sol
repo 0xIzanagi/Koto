@@ -7,6 +7,9 @@
 /// The bonding schedule is set to attempt to sell all of the tokens held within the contract in 1 day intervals. Taking a snapshot
 /// of the amount currently held within the contract at the start of the next internal period, using this amount as the capcipty to be sold.
 
+/// Socials
+/// Telegram: https://t.me/IzanangiPortal
+
 pragma solidity =0.8.22;
 
 import "./PricingLibrary.sol";
@@ -312,7 +315,7 @@ contract Koto {
             mstore(add(ptr, 4), and(_token0, 0xffffffffffffffffffffffffffffffffffffffff))
             mstore(add(ptr, 36), and(_token1, 0xffffffffffffffffffffffffffffffffffffffff))
             let result := call(gas(), UNISWAP_V2_FACTORY, 0, ptr, 68, 0, 32)
-            // Handle Revert here
+            if iszero(result) { revert(0, 0) }
             _pair := mload(0x00)
         }
     }
